@@ -24,6 +24,7 @@ var cordovaBridge = {
         var deferred = new Deferred();
 
         var win = function(res) {
+            //alert("bridgeman")
             deferred.resolve(res);
         };
 

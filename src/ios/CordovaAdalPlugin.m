@@ -2,23 +2,36 @@
  * Copyright (c) Microsoft Open Technologies, Inc.
  * All Rights Reserved
  * See License in the project root for license information.
+ *
+ * MN BEWEB 2018 - Added Intune capability
+ *
  ******************************************************************************/
 
 #import "CordovaAdalPlugin.h"
 #import "CordovaAdalUtils.h"
 
 #import <ADAL/ADAL.h>
+#import "IntuneMAM.h"
 
 @implementation CordovaAdalPlugin
 
+NSString *myCallbackId;
+
 - (void)createAsync:(CDVInvokedUrlCommand *)command
 {
+    IntuneMAMEnrollmentManager* enrolMan = [IntuneMAMEnrollmentManager instance];
+    IntuneMAMPolicyManager* policyMan = [IntuneMAMPolicyManager instance];
+    enrolMan.delegate = self;
+    policyMan.delegate = self;
+    
     [self.commandDelegate runInBackground:^{
         @try
         {
             NSString *authority = ObjectOrNil([command.arguments objectAtIndex:0]);
             BOOL validateAuthority = [[command.arguments objectAtIndex:1] boolValue];
 
+          [ADLogger setLevel:3];        // beweb added
+          
             [CordovaAdalPlugin getOrCreateAuthContext:authority
                                     validateAuthority:validateAuthority];
 
@@ -281,21 +294,129 @@
 
 - (void) setLogLevel:(CDVInvokedUrlCommand *)command
 {
-   [self.commandDelegate runInBackground:^{
-       @try {
-           NSNumber *logLevel = [command.arguments objectAtIndex:0];
-           [ADLogger setLevel:[logLevel intValue]];
-           CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    [self.commandDelegate runInBackground:^{
+        @try {
+            NSNumber *logLevel = [command.arguments objectAtIndex:0];
+            [ADLogger setLevel:[logLevel intValue]];
+            CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+            
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        }
+        
+        @catch(ADAuthenticationError* error) {
+            CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
+                                                          messageAsDictionary:[CordovaAdalUtils ADAuthenticationErrorToDictionary:error]];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        }
+    }];
+}
 
-           [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-       }
+//  * MN BEWEB 2018 - Added Intune capability
+- (void) intuneLogin:(CDVInvokedUrlCommand *)command
+{
+    NSString *email = ObjectOrNil([command.arguments objectAtIndex:0]);
+    myCallbackId = command.callbackId;
+    
+    NSLog(@"intuneLogin objc");
+    IntuneMAMEnrollmentManager* enrolMan = [IntuneMAMEnrollmentManager instance];
+    IntuneMAMPolicyManager* policyMan = [IntuneMAMPolicyManager instance];
+    
+    [[IntuneMAMEnrollmentManager instance] loginAndEnrollAccount:email];
+    
+    id x = [[IntuneMAMPolicyManager instance]  policy] ;
+    
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+    [pluginResult setKeepCallbackAsBool:YES];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+}
 
-       @catch(ADAuthenticationError* error) {
-           CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
-                                                         messageAsDictionary:[CordovaAdalUtils ADAuthenticationErrorToDictionary:error]];
-           [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-       }
-   }];
+- (void) intuneEnroll:(CDVInvokedUrlCommand *)command
+{
+    NSString *email = ObjectOrNil([command.arguments objectAtIndex:0]);
+    myCallbackId = command.callbackId;
+    
+    NSLog(@"intuneEnroll objc");
+    IntuneMAMEnrollmentManager* enrolMan = [IntuneMAMEnrollmentManager instance];
+    IntuneMAMPolicyManager* policyMan = [IntuneMAMPolicyManager instance];
+    
+    [[IntuneMAMEnrollmentManager instance] registerAndEnrollAccount:email];
+    
+    id x = [[IntuneMAMPolicyManager instance]  policy] ;
+    
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"ok"];
+    [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+}
+
+- (void) intuneUnenroll:(CDVInvokedUrlCommand *)command
+{
+    myCallbackId = command.callbackId;
+    NSLog(@"Yay, intuneUnenroll! %@", [IntuneMAMEnrollmentManager instance].enrolledAccount);
+  
+    [[IntuneMAMEnrollmentManager instance] deRegisterAndUnenrollAccount:[IntuneMAMEnrollmentManager instance].enrolledAccount withWipe:false];
+    
+    // no point calling back yet
+    //CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"ok"];
+    //[pluginResult setKeepCallbackAsBool:YES];
+    //[self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+}
+
+//  * MN BEWEB 2018 - Added Intune capability
+- (void)enrollmentRequestWithStatus:(IntuneMAMEnrollmentStatus *)status
+{
+    NSLog(@"enrollment result for identity %@ with status code %ld", status.identity, (unsigned long)status.statusCode);
+    NSLog(@"Debug Message: %@", status.errorString);
+    NSLog(@"enrollment Done");
+    
+    
+    NSMutableDictionary *json = [[NSMutableDictionary alloc] init];
+    [json setValue:status.errorString forKey:@"message"];
+    [json setValue:status.identity forKey:@"identity"];
+    [json setValue:[NSNumber numberWithInteger:status.statusCode] forKey:@"statusCode"];
+    
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
+                                                  messageAsDictionary:json];
+    //CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:status.errorString];
+    [pluginResult setKeepCallbackAsBool:YES];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:myCallbackId];
+}
+
+//  * MN BEWEB 2018 - Added Intune capability
+- (void)policyRequestWithStatus:(IntuneMAMEnrollmentStatus *)status
+{
+    NSLog(@"policy check-in result for identity %@ with status code %ld", status.identity, (unsigned long)status.statusCode);
+    
+    NSLog(@"Debug Message: %@", status.errorString);
+
+//    if (myCallbackId!=nil){
+//        CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:status.errorString];
+//        [pluginResult setKeepCallbackAsBool:YES];
+//        [self.commandDelegate sendPluginResult:pluginResult callbackId:myCallbackId];
+//    }
+}
+
+//  * MN BEWEB 2018 - Added Intune capability
+- (void)unenrollRequestWithStatus:(IntuneMAMEnrollmentStatus *)status
+{
+    NSLog(@"un-enroll result for identity %@ with status code %ld", status.identity, (unsigned long)status.statusCode);
+    NSLog(@"Debug Message: %@", status.errorString);
+
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"hey"];
+    [pluginResult setKeepCallbackAsBool:YES];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:myCallbackId];
+
+    NSLog(@"Plugin Result Message: %@", pluginResult.message);
+}
+
+// todo wipeDataForAccount
+// Called by the Intune SDK when the application should wipe data for the
+// specified account user principal name (e.g. user@contoso.com).
+// Returns TRUE if successful, FALSE if the account data could not be completely wiped.
+- (BOOL) wipeDataForAccount:(NSString*_Nonnull)upn
+{
+    NSString *js = [NSString stringWithFormat:@"wipeDataForAccountAdalNative(\"%@\")", upn];
+    [self.commandDelegate evalJs:js];
+    return TRUE;
 }
 
 static NSMutableDictionary *existingContexts = nil;

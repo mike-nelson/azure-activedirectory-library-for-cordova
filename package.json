@@ -42,6 +42,12 @@
       }
     }
   },
+  "dependencies": [
+    "fs",
+    "path",
+    "xcode",
+    "q"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AzureAD/azure-activedirectory-library-for-cordova.git"

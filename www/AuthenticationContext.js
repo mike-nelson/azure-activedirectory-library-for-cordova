@@ -3,6 +3,7 @@
 /*global module, require*/
 
 var checkArgs = require('cordova/argscheck').checkArgs;
+ var exec = require('cordova/exec');
 
 var bridge = require('./CordovaBridge');
 var Deferred = require('./utility').Utility.Deferred;
@@ -56,7 +57,7 @@ AuthenticationContext.createAsync = function (authority, validateAuthority) {
 
     bridge.executeNativeMethod('createAsync', [authority, validateAuthority]).then(function () {
         d.resolve(new AuthenticationContext(authority, validateAuthority));
-    }, function(err) {
+    }, function (err) {
         d.reject(err);
     });
 
@@ -84,11 +85,11 @@ AuthenticationContext.prototype.acquireTokenAsync = function (resourceUrl, clien
 
     bridge.executeNativeMethod('acquireTokenAsync', [this.authority, this.validateAuthority, resourceUrl, clientId, redirectUrl,
         userId, extraQueryParameters])
-    .then(function(authResult){
-        d.resolve(new AuthenticationResult(authResult));
-    }, function(err) {
-        d.reject(err);
-    });
+        .then(function (authResult) {
+            d.resolve(new AuthenticationResult(authResult));
+        }, function (err) {
+            d.reject(err);
+        });
 
     return d;
 };
@@ -111,13 +112,77 @@ AuthenticationContext.prototype.acquireTokenSilentAsync = function (resourceUrl,
     var d = new Deferred();
 
     bridge.executeNativeMethod('acquireTokenSilentAsync', [this.authority, this.validateAuthority, resourceUrl, clientId, userId])
-    .then(function(authResult){
-        d.resolve(new AuthenticationResult(authResult));
-    }, function(err) {
-        d.reject(err);
-    });
+        .then(function (authResult) {
+            d.resolve(new AuthenticationResult(authResult));
+        }, function (err) {
+            d.reject(err);
+        });
 
     return d;
 };
+
+AuthenticationContext.prototype.intuneLogin = function (email, success, fail) {
+    console.log("intuneLogin js2")
+
+    //checkArgs('ssS', 'AuthenticationContext.acquireTokenSilentAsync', arguments);
+
+    //var d = new Deferred();
+
+    exec(success, fail, "ADALProxy", "intuneLogin", [email]);
+
+    // bridge.executeNativeMethod('intuneLogin', [email])
+    //     .then(function (result) {
+    //         console.log("intuneLogin returns! ", result);
+    //         alert("intuneLogin returns! "+ result)
+    //         d.resolve(result);
+    //     }, function (err) {
+    //         d.reject(err);
+    //     });
+
+    // return d;
+};
+
+AuthenticationContext.prototype.intuneEnroll = function (email, success, fail) {
+    console.log("intuneEnroll js")
+
+    exec(success, fail, "ADALProxy", "intuneEnroll", [email]);
+
+    //checkArgs('ssS', 'AuthenticationContext.acquireTokenSilentAsync', arguments);
+
+    // var d = new Deferred();
+
+    // bridge.executeNativeMethod('intuneEnroll', [email])
+    //     .then(function (result) {
+    //         console.log("intuneEnroll returns! ", result);
+    //         //alert("intuneEnroll returns! "+ result)
+    //         d.resolve(result);
+    //     }, function (err) {
+    //         d.reject(err);
+    //     });
+
+    // return d;
+};
+
+AuthenticationContext.prototype.intuneUnenroll = function (email, success, fail){    //function (resourceUrl, clientId, userId) {
+    console.log("unenroll js! ")
+    exec(success, fail, "ADALProxy", "intuneUnenroll", [email]);
+
+    //checkArgs('ssS', 'AuthenticationContext.acquireTokenSilentAsync', arguments);
+
+    // var d = new Deferred();
+
+    // bridge.executeNativeMethod('intuneUnenroll', [this.authority, this.validateAuthority, resourceUrl, clientId, userId])
+    //     .then(function (result) {
+    //         console.log("unenroll returns! ", result);
+    //         //alert("intune unenroll returns! "+ result)
+    //         d.resolve(result);
+    //     }, function (err) {
+    //         d.reject(err);
+    //     });
+
+    // return d;
+};
+
+AuthenticationContext.Intune = true;
 
 module.exports = AuthenticationContext;
